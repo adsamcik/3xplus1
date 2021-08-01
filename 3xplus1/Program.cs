@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Threading;
+using System.Diagnostics;
 
 namespace _3xplus1
 {
@@ -60,6 +61,7 @@ namespace _3xplus1
 
         static void NumberLoop(Options o, CancellationToken token)
         {
+            var sw = new Stopwatch();
             while (true)
             {
                 var bytes = ThreadSafeRandom.Next(o.MinByteLength, o.MaxByteLength);
@@ -85,8 +87,11 @@ namespace _3xplus1
                         number = -number;
                     }
 
+                    sw.Restart();
                     // Run the operation
                     var count = CountSteps(number, token);
+
+                    sw.Stop();
 
                     if (token.IsCancellationRequested)
                     {
@@ -101,11 +106,11 @@ namespace _3xplus1
                         {
                             File.AppendAllText("found_number.txt", number.ToString());
                         }
-                        Console.WriteLine($"Found number that does not come to 0");
+                        Console.WriteLine($"Found number that does not come to 0. Took {new TimeSpan(sw.ElapsedTicks)}.");
                     }
                     else
                     {
-                        Console.WriteLine($"Tried number with {bytes} bytes and came to 1 after {count} steps");
+                        Console.WriteLine($"Tried number with {bytes} bytes and came to 1 after {count} steps. Took {new TimeSpan(sw.ElapsedTicks)}.");
                     }
 
                 }

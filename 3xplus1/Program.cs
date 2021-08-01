@@ -110,7 +110,7 @@ namespace _3xplus1
                     }
                     else
                     {
-                        Console.WriteLine($"Tried number with {bytes} bytes and came to 1 after {count} steps. Took {new TimeSpan(sw.ElapsedTicks)}.");
+                        Console.WriteLine($"Tried number with {bytes} bytes and came to 1 after {count} steps. Took {new TimeSpan(sw.ElapsedTicks)} and {new TimeSpan(sw.ElapsedTicks / count)} per step.");
                     }
 
                 }

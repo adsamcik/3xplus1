@@ -24,21 +24,30 @@ namespace _3xplus1
             public int MaxByteLength { get; set; }
         }
 
+        // Prevents unecessary allocations
+        private readonly static BigInteger Two = new(2);
+        private readonly static BigInteger Three = new(3);
+        private readonly static BigInteger One = BigInteger.One;
+        private readonly static string FilePath = "found_number.txt";
+
         static long CountSteps(BigInteger number, CancellationToken token)
         {
-            for (var i = 0L; i < long.MaxValue; i++)
+            for (var i = 1L; i < long.MaxValue; i++)
             {
-                if (number == 1)
-                {
-                    return i;
-                }
+                // Unfortunately creates a lot of copies
+                // https://github.com/dotnet/runtime/issues/29378 should solve it (hopefully in .NET 7)
                 if (number.IsEven)
                 {
-                    number /= 2;
+                    number /= Two;
                 }
                 else
                 {
-                    number = number * 3 + 1;
+                    number = number * Three + One;
+                }
+
+                if (number == 1)
+                {
+                    return i;
                 }
 
                 if (token.IsCancellationRequested)
@@ -55,21 +64,28 @@ namespace _3xplus1
             {
                 var bytes = ThreadSafeRandom.Next(o.MinByteLength, o.MaxByteLength);
                 Console.WriteLine($"Trying number with {bytes} bytes");
+                // Allocates pointer with up to int.MaxNumber of bytes.
                 var ptr = Marshal.AllocHGlobal(bytes);
                 try
                 {
                     Span<byte> span;
+                    // Working with pointers so needs to be unsafe
                     unsafe
                     {
+                        // Assigns the allocated memory to span
                         span = new Span<byte>((byte*)ptr, bytes);
                     }
                     ThreadSafeRandom.NextBytes(span);
                     var number = new BigInteger(span);
+
+                    // Safer than flipping a byte because of endiness and possible differences in implementations
+                    // Unfortunately duplicates the number, but this is not much of an issue.
                     if (number.Sign == -1)
                     {
                         number = -number;
                     }
 
+                    // Run the operation
                     var count = CountSteps(number, token);
 
                     if (token.IsCancellationRequested)
@@ -80,7 +96,11 @@ namespace _3xplus1
 
                     if (count == -1L)
                     {
-                        File.AppendAllText("found_number.txt", number.ToString());
+                        // In this case there is basically no chance for race condition to occur, but for the completeness.
+                        lock (FilePath)
+                        {
+                            File.AppendAllText("found_number.txt", number.ToString());
+                        }
                         Console.WriteLine($"Found number that does not come to 0");
                     }
                     else
@@ -120,17 +140,26 @@ namespace _3xplus1
                     var threads = new List<Task>();
                     for (int i = 0; i < o.Threads; i++)
                     {
+                        // Creates new threads.
                         threads.Add(Task.Factory.StartNew(() => NumberLoop(o, token), token));
                     }
 
+                    // Awaits all tasks to finish
                     await Task.WhenAll(threads);
 
                 });
         }
 
+        /// <summary>
+        /// Based on response from.
+        /// BlueRaja - Danny Pflughoeft
+        /// https://stackoverflow.com/a/11109361
+        /// </summary>
         public static class ThreadSafeRandom
         {
             private static readonly Random _global = new();
+
+            // Ensures that each thread has its own local value
             [ThreadStatic]
             private static Random _local;
 
@@ -141,8 +170,10 @@ namespace _3xplus1
                     int seed;
                     lock (_global)
                     {
+                        // Prevents all threads to generate the same random values
                         seed = _global.Next();
                     }
+
                     _local = new Random(seed);
                 }
             }
